@@ -44,6 +44,7 @@ O público pensado para uma futura versão inclui moradores, equipes de monitora
 | Módulo | O que é possível explorar | Rota |
 | --- | --- | --- |
 | **Visão geral** | Indicadores de resumo, tabela de pontos, tendências, detalhes em modal e gráfico com seleção de ponto e períodos de 24h ou 7 dias. | `/` |
+| **Simulação** | Circuito SVG, motor hidráulico, chuva, drenagem automática, reúso, proteções e eventos compartilhados com a Visão geral. | `/simulacao` |
 | **Mapa** | Marcadores selecionáveis, busca por nome, filtros de status, zoom e detalhes do ponto selecionado. | `/mapa` |
 | **Alertas** | Filtros de avisos ativos e resolvidos, níveis demonstrativos, linha do tempo, mapa ampliado e exibição de trajeto ilustrativo. | `/alertas` |
 | **Ocorrências** | Busca por local ou bairro, filtros por situação, ordenação, galeria de imagens e formulário de relato. | `/ocorrencias` |
@@ -78,7 +79,7 @@ Esses valores são exemplos definidos no código. Alertas e histórico apresenta
 | **React 19** | Componentes da interface e gerenciamento de estado das interações. |
 | **TypeScript 5.9** | Tipagem de pontos, ocorrências, eventos e configurações. |
 | **Vite 7** | Servidor de desenvolvimento e geração do build. |
-| **React Router 7** | Navegação entre as seis páginas e seleção de pontos pela URL. |
+| **React Router 7** | Navegação entre as páginas e seleção de pontos pela URL. |
 | **CSS** | Estilos globais, identidade visual e layouts responsivos por módulo. |
 | **Lucide React** | Ícones utilizados na navegação e nos indicadores. |
 | **Supabase JS** | Base de integração para o backend futuro; ainda sem uso nas telas. |
@@ -96,7 +97,7 @@ Os gráficos são desenhados com **SVG**, e o mapa utiliza uma imagem local com 
 ### 1. Clone e instale
 
 ```bash
-git clone https://github.com/mateuszxezz/AquaMonitor.git
+git clone https://github.com/mateussba/AquaMonitor.git
 cd AquaMonitor
 npm ci
 ```
@@ -224,7 +225,7 @@ A escolha de dados demonstrativos permite desenvolver e avaliar os fluxos da int
 
 ## 🤝 Contribuições
 
-Sugestões e melhorias podem ser apresentadas nas [issues do repositório](https://github.com/mateuszxezz/AquaMonitor/issues). Para contribuir com código, descreva o problema, mantenha a organização por funcionalidades e execute `npm run lint` e `npm run build` antes de abrir um pull request.
+Sugestões e melhorias podem ser apresentadas nas [issues do repositório](https://github.com/mateussba/AquaMonitor/issues). Para contribuir com código, descreva o problema, mantenha a organização por funcionalidades e execute `npm run lint` e `npm run build` antes de abrir um pull request.
 
 ## 🌐 English overview
 
@@ -233,3 +234,99 @@ Sugestões e melhorias podem ser apresentadas nas [issues do repositório](https
 The current version uses local demonstration data. Reports are held in page state, preferences are stored in the browser, and the initial Supabase integration is not yet connected to the UI. Future work includes real sensor readings, database persistence, authentication, and live updates.
 
 To run locally, clone the repository, run `npm ci`, then `npm run dev`. No Supabase credentials are required to explore the current prototype.
+
+
+## Simulação hidráulica — primeira etapa
+
+A rota `/simulacao` e o cartão **Monitoramento virtual** da Visão geral compartilham uma estação de demonstração, independente dos três pontos urbanos. A implementação não adiciona dependências e funciona localmente sem serviços externos. A fonte Google Fonts já existente é opcional: o navegador utiliza fontes de sistema offline.
+
+### Organização e decisões
+
+- `src/features/simulation/engine/simulation.ts`: tipos, configuração centralizada, seletores, reducer puro e balanço volumétrico. Nenhuma dependência de React, relógio ou rede.
+- `components/SimulationProvider.tsx` e `hooks/SimulationContext.ts`: estado compartilhado acima do `AppShell` e das rotas, um único intervalo com limpeza em pausa/desmontagem, delta medido com `performance.now()`.
+- `components/HydraulicScene.tsx`: desenho SVG e animações condicionadas aos estados do motor; pausa congela as animações e a preferência por movimento reduzido é respeitada.
+- `components/VirtualMonitoring.tsx`: acompanha nível, drenagem, reservatório, risco e último evento no dashboard.
+- `pages/SimulationPage.tsx` e `styles/simulation.css`: controles acessíveis, métricas, alarmes, eventos e explicação do modelo. No celular, o circuito permite rolagem horizontal para preservar a legibilidade técnica.
+- `tests/simulation.test.mjs`: testes determinísticos com o executor nativo do Node, sem biblioteca adicional.
+
+### Parâmetros didáticos
+
+| Parâmetro | Valor |
+| --- | --- |
+| Galeria prismática | Base 0,1 m²; 1 litro/cm; máximo 30 cm = 30 L |
+| Estado inicial | Galeria 8 L; reservatório 5 L; capacidade 40 L; chuva zero; pausada |
+| Capacidade configurável | 5–200 L |
+| Chuva efetiva de 100% | 3 L/min; controle linear de 0–100% |
+| Drenagem nominal | 2 L/min; liga ≥20 cm, desliga ≤12 cm |
+| Reúso nominal | 1,2 L/min, condicionado à solicitação e água disponível |
+| Risco da estação | Normal <18 cm; atenção ≥18 cm; crítico ≥26 cm |
+| Tempo | 1×, 10×, 30× (inicial), 60× ou 120× |
+| Integração | Passo fixo de 0,25 segundo simulado com resíduo entre atualizações |
+
+O filtro é ideal, sem perdas e sem atraso. O motor limita as transferências pela disponibilidade da origem e capacidade do destino, contabiliza excesso e nunca permite volumes negativos ou acima das capacidades. Pequenas diferenças de até um passo podem ocorrer nos instantes de cruzamento de limites.
+
+A identidade de conservação é:
+
+```text
+volume da galeria + volume do reservatório
+= 13 L iniciais + chuva acumulada + aporte externo de teste
+  - reúso acumulado - transbordamento acumulado
+```
+
+O botão de reservatório cheio injeta um aporte externo contabilizado; reduzir a capacidade contabiliza o excesso como transbordamento. Falha de sensor e destino cheio bloqueiam a drenagem imediatamente, mesmo em pausa. A solicitação de reúso permanece ativa até cancelamento; a bomba bloqueia no vazio e pode retomar quando houver água. Estados de bomba representam a decisão do controlador; em pausa, não há transferência e as vazões exibidas são zero.
+
+### Executar e validar
+
+```bash
+npm ci
+npm run dev
+# abrir http://localhost:5173/simulacao
+npm test
+npm run build
+npm run lint
+```
+
+Para `npm test`, utilize Node 22.18+ ou Node 24+, com suporte nativo a TypeScript. A validação desta entrega foi feita no Node 24.21.0.
+
+Os 11 testes automatizados cobrem A–H e J: chuva desligada, elevação por tempestade, acionamento a 20 cm, histerese e desligamento a 12 cm, destino cheio, reúso, vazio, falha do sensor e reinicialização. Também verificam balanço com excesso e aporte externo, redução de capacidade, pausa/continuidade, validação de controles e independência da frequência dos ticks.
+
+O cenário I foi verificado no navegador: após iniciar tempestade, pausar e alternar `/simulacao` → `/` → `/simulacao`, os valores foram preservados; após continuar, o nível subiu diretamente no cartão da Visão geral. Também foram inspecionados layouts em 1440×1000 e 390×844 e a entrada de Simulação no menu móvel. Build e lint passaram. A verificação no navegador é manual, não uma suíte E2E versionada.
+
+Roteiro rápido: iniciar, simular tempestade e aguardar 20 cm; parar chuva para observar o desligamento a 12 cm; solicitar reúso; preencher o reservatório para testar bloqueio; ativar/desativar falha do sensor; navegar para a Visão geral; reiniciar. Com velocidade de 30×, a tempestade leva aproximadamente 8 segundos reais para sair de 8 cm e chegar a 20 cm.
+
+### Integração ESP32 Wokwi / MQTT
+
+Projeto de referência: https://wokwi.com/projects/478540696015596545. Contrato conferido diretamente no `sketch.ino` desse projeto, sem modificar firmware ou circuito.
+
+- Broker WebSocket seguro: `wss://broker.emqx.io:8084/mqtt`.
+- Base dos tópicos: `aquamonitor/demo-29out-b741d2`; sufixos `/telemetria`, `/comandos` e `/status`.
+- MQTT.js centralizado em `src/features/esp32/mqttService.ts`; uma conexão por provider, client ID único, sessão limpa, reconexão a cada 2 s, inscrição após cada conexão e remoção de listeners/timers ao sair. Pacotes inválidos e telemetria retida são descartados; leituras expiram após 6 s sem telemetria válida. O status retido `online` sozinho não comprova que o ESP32 está transmitindo.
+- O seletor **Simulação local** preserva o motor offline. **ESP32 conectado (Wokwi)** abre a estação virtual de demonstração, com escala própria de 30 cm, indicadores, alarmes, bombas e gráfico separado. Os pontos e gráficos urbanos permanecem independentes.
+- Entrada **HC-SR04 e chaves do Wokwi**: envia `{"mode":"sensor"}`; o nível e acionamentos exibidos vêm da telemetria, e o motor hidráulico local aguarda.
+- Entrada **Níveis e boias do simulador React**: envia imediatamente e a cada 2 s o comando abaixo, inclusive quando pausado, respeitando o timeout de 8 s do firmware. Reconexão e retorno da aba reenviam os valores atuais. Ao encerrar a entrada virtual, tenta retornar ao sensor; se a conexão já caiu, vale o timeout do firmware.
+
+```json
+{"mode":"virtual","level_cm":8,"tank_full":false,"tank_empty":false,"reuse_requested":false,"sensor_ok":true}
+```
+
+A telemetria valida `level_cm`, `level_pct`, `distance_cm`, `sensor_ok`, `drain_on`, `reuse_on`, `tank_full`, `tank_empty`, `alarm`, `alarm_code` e `input_mode`, incluindo tipos, faixas e coerência nível/percentual. Os acionamentos do ESP32 são a fonte das bombas no modo conectado. O motor hidráulico aguarda telemetria recente e confirmação de `input_mode: "virtual"`. Leituras recebidas não sobrescrevem os volumes que originam os comandos, evitando realimentação. Os litros do reservatório continuam sendo estimativa local: o firmware transmite boias, não volume em litros. O comando virtual não movimenta fisicamente o controle de distância do HC-SR04 no Wokwi.
+
+### Validação da integração
+
+Executar `npm run build`, `npm run lint` e `npm test` (Node 22.18+ ou 24+). A suíte contém 18 testes: os 11 anteriores do motor e 7 adicionais de schema, mensagens, reconexão, expiração, limpeza, contrato de comandos, decisão externa, ausência de realimentação e heartbeat a cada 2 s com relógio controlado. As respostas ESP32 dos testes automatizados são emuladas e não equivalem a uma execução real do firmware.
+
+Verificações realizadas nesta integração:
+
+- Build de produção, lint e suíte automatizada executados. O Vite informa aviso de bundle maior que 500 kB.
+- Conexão real WSS com EMQX e inscrição nos dois tópicos confirmadas por cliente MQTT.js. Na primeira janela de observação de 12 s, recebido somente status retido `offline`, sem telemetria.
+- Dashboard aberto no navegador: seletor de fonte renderizado e pontos urbanos preservados (62, 38 e 21 cm).
+- Firmware do projeto Wokwi lido e contrato conferido. Tentativa de iniciar a simulação pelo botão de execução; o navegador deixou de responder e as consultas seguintes expiraram. Não foi possível comprovar alteração do HC-SR04 nem chuva React com decisões reais retornadas pelo ESP32 nesta sessão.
+
+Roteiro para concluir a validação ao vivo:
+
+1. Iniciar o projeto Wokwi e manter a aba executando. No dashboard, selecionar **ESP32 conectado (Wokwi)** e entrada **HC-SR04 e chaves do Wokwi**. Aguardar “ESP32 transmitindo”. Manter boia superior sem cheio e inferior com água disponível.
+2. Alterar distância para 8 cm (nível aproximadamente 22 cm): esperar drenagem ligada. Alterar para 20 cm (nível aproximadamente 10 cm): esperar drenagem desligada. Conferir mudança automática dos indicadores e gráfico da estação.
+3. Selecionar **Níveis e boias do simulador React**, abrir Simulação, iniciar e clicar **Simular tempestade**. Aguardar confirmação `input_mode: virtual`; nível sobe, comandos seguem a cada 2 s e a decisão `drain_on` do ESP32 passa a comandar o circuito ao alcançar 20 cm.
+4. Pausar: heartbeat deve continuar. Desligar Wokwi: após até 6 s a interface deve indicar telemetria desatualizada e o motor deve aguardar. Voltar à **Simulação local** e confirmar funcionamento offline.
+
+Limitações: broker público sem autenticação, sem exclusão entre vários dashboards usando os mesmos tópicos; usar uma aba controladora por vez. A confirmação é por telemetria de modo/estado, sem ACK individual de comando no firmware atual. Navegadores podem suspender timers de abas em segundo plano: nesse caso o firmware retorna ao sensor após 8 s e o dashboard aguarda confirmação novamente. Histórico e estado ficam em memória; recarregar restaura o cenário. O simulador é didático e não representa bombas reais ou um modelo hidráulico calibrado.

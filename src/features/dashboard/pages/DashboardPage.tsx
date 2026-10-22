@@ -1,3 +1,4 @@
+import { VirtualMonitoring } from '@/features/simulation/components/VirtualMonitoring'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, ChevronDown, ChevronRight, CircleAlert, MapPin, Radio, Waves, X } from 'lucide-react'
@@ -84,6 +85,8 @@ export function DashboardPage() {
         <MetricCard label="Em atenção" value="1" detail="Nível acima do ideal" icon={<AlertTriangle size={27} />} tone="amber" />
         <MetricCard label="Críticos" value="0" detail="Nível muito elevado" icon={<CircleAlert size={27} />} tone="red" />
       </div>
+
+      <VirtualMonitoring />
 
       <div className="dashboard-grid overview-grid" id="pontos">
         <article className="panel points-panel">

@@ -1,4 +1,5 @@
 import {
+  FlaskConical,
   Bell,
   ChartNoAxesCombined,
   Droplets,
@@ -20,6 +21,7 @@ const navigation = [
     title: 'Monitoramento',
     items: [
       { to: '/', label: 'Visão geral', icon: Grid2X2, isSection: false },
+      { to: '/simulacao', label: 'Simulação', icon: FlaskConical, isSection: false },
       { to: '/mapa', label: 'Mapa em tempo real', icon: MapPinned, isSection: false },
       { to: '/alertas', label: 'Alertas', icon: Bell, isSection: false, badge: '2' },
     ],
@@ -44,15 +46,15 @@ const navigation = [
 export function AppShell({ children }: PropsWithChildren) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const location = useLocation()
-  const mobileMenuActive = location.pathname === '/historico' || location.pathname === '/configuracoes'
+  const mobileMenuActive = location.pathname === '/simulacao' || location.pathname === '/historico' || location.pathname === '/configuracoes'
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <a className="brand" href="/">
+        <NavLink className="brand" to="/">
           <span className="brand-mark"><Droplets size={21} /></span>
           <span>Aqua<span>Monitor</span></span>
-        </a>
+        </NavLink>
 
         <nav aria-label="Navegação principal">
           {navigation.map((group) => (
@@ -112,6 +114,7 @@ export function AppShell({ children }: PropsWithChildren) {
         <div className="mobile-more-menu">
           <button type="button" className={`mobile-menu-button ${mobileMenuActive ? 'active' : ''}`} aria-expanded={mobileMenuOpen} aria-haspopup="menu" onClick={() => setMobileMenuOpen((open) => !open)}><Menu /><span>Mais</span></button>
           {mobileMenuOpen && <div className="mobile-menu-popover" role="menu">
+            <NavLink to="/simulacao" role="menuitem" onClick={() => setMobileMenuOpen(false)}><FlaskConical /><span><strong>Simulação</strong><small>Estação hidráulica virtual</small></span></NavLink>
             <NavLink to="/historico" role="menuitem" onClick={() => setMobileMenuOpen(false)}><ChartNoAxesCombined /><span><strong>Histórico</strong><small>Eventos e níveis anteriores</small></span></NavLink>
             <NavLink to="/configuracoes" role="menuitem" onClick={() => setMobileMenuOpen(false)}><Settings /><span><strong>Configurações</strong><small>Preferências do aplicativo</small></span></NavLink>
           </div>}

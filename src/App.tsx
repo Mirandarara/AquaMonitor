@@ -1,3 +1,6 @@
+import { SimulationProvider } from '@/features/simulation/components/SimulationProvider'
+import { SimulationPage } from '@/features/simulation/pages/SimulationPage'
+import '@/features/simulation/styles/simulation.css'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
 import { DashboardPage } from '@/features/dashboard/pages/DashboardPage'
@@ -11,20 +14,23 @@ import { SettingsPage } from '@/features/settings/pages/SettingsPage'
 // endereço e coloca todas elas dentro do mesmo layout (menu + área de conteúdo).
 export default function App() {
   return (
-    <AppShell>
-      <Routes>
-        {/* Cada Route relaciona um endereço da URL a um componente de página. */}
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/mapa" element={<MapPage />} />
-        <Route path="/alertas" element={<AlertsPage />} />
-        <Route path="/ocorrencias" element={<OccurrencesPage />} />
-        <Route path="/historico" element={<HistoryPage />} />
-        <Route path="/configuracoes" element={<SettingsPage />} />
+    <SimulationProvider>
+      <AppShell>
+        <Routes>
+          {/* Cada Route relaciona um endereço da URL a um componente de página. */}
+          <Route path="/simulacao" element={<SimulationPage />} />
+          <Route path="/" element={<DashboardPage />} />
+          <Route path="/mapa" element={<MapPage />} />
+          <Route path="/alertas" element={<AlertsPage />} />
+          <Route path="/ocorrencias" element={<OccurrencesPage />} />
+          <Route path="/historico" element={<HistoryPage />} />
+          <Route path="/configuracoes" element={<SettingsPage />} />
 
-        {/* O asterisco captura endereços inexistentes. "replace" evita que a
-            URL inválida fique guardada no histórico do botão Voltar. */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </AppShell>
+          {/* O asterisco captura endereços inexistentes. "replace" evita que a
+              URL inválida fique guardada no histórico do botão Voltar. */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AppShell>
+    </SimulationProvider>
   )
 }

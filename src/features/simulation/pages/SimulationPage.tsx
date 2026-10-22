@@ -1,0 +1,39 @@
+import { useStationView } from '../../esp32/useStationView'
+import { Esp32Panel } from '../../esp32/Esp32Panel'
+import { Play, Pause, RotateCcw, CloudRain, CloudOff, Droplets, FlaskConical } from 'lucide-react'
+import { useSimulation } from '../hooks/SimulationContext'
+import { formatTime, galleryHeight, riskLabels, SIMULATION_CONFIG as config, pumpLabels } from '../engine/simulation'
+import { alarmLabels } from '../engine/simulation'
+import { HydraulicScene } from '../components/HydraulicScene'
+
+export function SimulationPage() {
+  const { state: local, dispatch, mode, mqtt, fresh, virtualInput } = useSimulation()
+  const s = useStationView()
+  const t = mqtt.telemetry
+  return <section className="page simulation-page">
+    <header className="page-header"><div><p className="eyebrow">Laboratório hidráulico</p><h1>Simulação</h1><p className="subtitle">Da chuva ao reúso: acompanhe cada etapa da estação virtual.</p></div><span className="sim-demo"><FlaskConical size={16} /> Estação de demonstração</span></header>
+    <div className="sim-notice">Modelo didático com valores estimados. Esta estação tem escala própria de 30 cm e não representa leituras dos pontos urbanos.</div>
+    <Esp32Panel /><div className="sim-toolbar panel"><div className="sim-actions"><button className="sim-primary" disabled={mode === 'wokwi' && (!virtualInput || !fresh)} onClick={() => dispatch({ type: 'running', value: !s.running })}>{s.running ? <Pause size={17} /> : <Play size={17} />}{s.running ? 'Pausar' : s.started ? 'Continuar' : 'Iniciar simulação'}</button><button onClick={() => dispatch({ type: 'reset' })}><RotateCcw size={16} /> Reiniciar cenário</button></div><div className="sim-clock"><span>{mode === 'wokwi' && (!virtualInput || !fresh) ? 'Motor aguardando' : s.running ? 'Em execução' : s.started ? 'Pausada' : 'Pronta'}</span><strong>{formatTime(s.time)}</strong><small>tempo simulado • {s.speed}×</small></div></div>
+    <div className="sim-metrics">
+      <article><span>Nível da galeria</span><strong>{galleryHeight(s).toFixed(1)} <small>cm</small></strong><small>Limite físico: {config.maxHeightCm} cm</small></article>
+      <article><span>Água armazenada (estimativa local)</span><strong>{s.tankLiters.toFixed(1)} <small>L</small></strong><small>Capacidade: {s.capacityLiters} L</small></article>
+      <article><span>Classificação virtual</span><strong className={`sim-risk-${s.risk}`}>{riskLabels[s.risk]}</strong><small>Atenção ≥ {config.attentionCm} • crítico ≥ {config.criticalCm} cm</small></article>
+      <article><span>Transbordamento acumulado</span><strong>{s.overflowTotal.toFixed(2)} <small>L</small></strong><small>Excesso contabilizado no balanço</small></article>
+    </div>
+    <article className="panel sim-circuit"><div className="panel-heading"><div><h2>Circuito hidráulico virtual</h2><p>{mode === 'wokwi' ? 'Bombas comandadas pelo ESP32. Reservatório em litros estimado pelo motor local; as boias do ESP32 aparecem acima.' : 'Água, bombas e fluxos acompanham o estado calculado.'} {s.running ? '' : 'Motor hidráulico pausado.'}</p></div><span className={`sim-risk sim-risk-${s.risk}`}>{riskLabels[s.risk]}</span></div><HydraulicScene state={s} connected={mode === 'wokwi'} /><div className="sim-flow-summary"><span>Entrada da chuva <b>{(s.running ? s.rain / 100 * config.rainLitersPerMinute : 0).toFixed(1)} L/min</b></span><span>Drenagem • {pumpLabels[s.drainage]} <b>{s.running && s.drainage === 'on' ? '2,0' : '0,0'} L/min nominal</b></span><span>Reúso • {pumpLabels[s.reuse]} <b>{s.running && s.reuse === 'on' ? '1,2' : '0,0'} L/min nominal</b></span></div></article>
+    <div className="sim-bottom-grid">
+      <article className="panel sim-controls"><fieldset disabled={mode === 'wokwi' && !virtualInput}><h2>Controles do cenário</h2><p className="sim-help">Ajustes também podem ser preparados com o tempo pausado.</p>
+        <label className="sim-control" htmlFor="simulation-rain">Intensidade da chuva <output>{s.rain}%</output><input id="simulation-rain" type="range" min="0" max="100" step="1" value={s.rain} onChange={e => dispatch({ type: 'rain', value: Number(e.target.value) })} /></label>
+        <div className="sim-actions"><button onClick={() => dispatch({ type: 'rain', value: 100 })}><CloudRain size={17} /> Simular tempestade</button><button onClick={() => dispatch({ type: 'rain', value: 0 })}><CloudOff size={17} /> Parar chuva</button></div>
+        <label className="sim-control">Velocidade do tempo<select value={s.speed} onChange={e => dispatch({ type: 'speed', value: Number(e.target.value) })}>{[1, 10, 30, 60, 120].map(speed => <option key={speed} value={speed}>{speed}× • {speed} s simulados / s real</option>)}</select></label>
+        <label className="sim-control" htmlFor="simulation-capacity">Capacidade do reservatório (L)<output>{s.capacityLiters} L</output><input id="simulation-capacity" type="range" min="5" max="200" step="1" value={s.capacityLiters} onChange={e => dispatch({ type: 'capacity', value: Number(e.target.value) })} /></label>
+        <button className="sim-reuse-button" aria-pressed={s.reuseRequested} onClick={() => dispatch({ type: 'reuse' })}><Droplets size={17} />{s.reuseRequested ? 'Cancelar reúso' : 'Solicitar reúso'}</button><p className="sim-help">A solicitação permanece ativa até cancelar; sem água, a bomba é bloqueada.</p>
+        <fieldset><legend>Teste de proteções</legend><button disabled={s.tankLiters >= s.capacityLiters} onClick={() => dispatch({ type: 'fill' })}>Simular reservatório cheio</button><label className="sim-checkbox"><input type="checkbox" checked={local.sensorFault} onChange={e => dispatch({ type: 'sensor', value: e.target.checked })} /> Simular falha do sensor</label><p className="sim-help">O preenchimento adiciona água externa simulada e é registrado no balanço.</p></fieldset>
+      </fieldset></article>
+      <div className="sim-log-column"><article className="panel"><h2>Alarmes ativos <span className="sim-count">{mode === 'wokwi' ? fresh ? Number(t?.alarm ?? false) : '?' : s.alarms.length}</span></h2><div aria-live="polite">{mode === 'wokwi' ? <p>{!fresh ? 'ESP32 sem telemetria atual.' : t?.alarm ? `Alarme ESP32: ${t.alarm_code}` : 'Nenhum alarme informado pelo ESP32.'}</p> : s.alarms.length ? <ul className="sim-alarms">{s.alarms.map(alarm => <li key={alarm}>{alarmLabels[alarm]}</li>)}</ul> : <p className="sim-clear">Nenhuma proteção acionada.</p>}</div></article>
+        <article className="panel"><h2>Histórico da estação</h2><p className="sim-help">Eventos em tempo simulado • últimos 500 registros</p><ol className="sim-events" aria-label="Eventos da simulação">{s.events.slice().reverse().map(event => <li key={event.id}><time>{formatTime(event.time)}</time><span>{event.message}</span></li>)}</ol></article>
+      </div>
+    </div>
+    <details className="panel sim-model"><summary>Modelo hidráulico e balanço de volumes</summary><p>Galeria prismática de base 0,1 m²: cada centímetro corresponde a 1 litro, até 30 L. Chuva de 100% gera entrada efetiva estimada de 3 L/min. Filtro ideal, sem perdas ou atraso. Drenagem liga a 20 cm, desliga a 12 cm e mantém o estado entre esses limites, respeitando sensor e capacidade de destino. Vazões são limitadas pela água e pelo espaço disponíveis em cada passo de 0,25 s.</p><p>Galeria + reservatório = água inicial (13 L) + chuva + aporte externo − reúso − transbordamento. Transferência pela drenagem é interna ao sistema.</p><dl className="sim-summary"><div><dt>Entrada de chuva</dt><dd>{s.rainTotal.toFixed(2)} L</dd></div><div><dt>Transferido pelo filtro</dt><dd>{s.drainedTotal.toFixed(2)} L</dd></div><div><dt>Água reutilizada</dt><dd>{s.reusedTotal.toFixed(2)} L</dd></div><div><dt>Aporte externo de teste</dt><dd>{s.externalAddedTotal.toFixed(2)} L</dd></div></dl></details>
+  </section>
+}
