@@ -1,0 +1,61 @@
+/* The original logo is kept as supplied; semantic alert colors remain distinct. */
+:root {
+  --brand-navy: #042b40;
+  --brand-deep: #00182d;
+  --brand-cyan: #20c5dc;
+  --brand-water: #03b6cd;
+  --brand-blue: #007faf;
+  --brand-cream: #fff7d6;
+  --brand-ice: #e9faff;
+  --dashboard-ink: #042b40;
+  --dashboard-muted: #607e90;
+  --dashboard-border: #d8eaf0;
+  --dashboard-teal: #007f9f;
+}
+.sidebar {
+  background: linear-gradient(175deg, #042b40 0%, #042b40 34%, #033349 72%, #002035 100%);
+  border-right: 1px solid #20c5dc22;
+}
+.sidebar .brand { position: relative; display: flex; flex-direction: column; gap: 0; padding: 0 0 15px; border-bottom: 1px solid #8bdde72b; }
+.sidebar .brand-logo { display: block; width: 190px; max-width: 100%; height: 105px; object-fit: contain; }
+.brand-signature { color: #8bdde7; font-size: 8px; font-weight: 600; letter-spacing: .19em; line-height: 1.4; }
+.sidebar nav { margin-top: 23px; }
+.nav-group-heading { color: #83bacb; }
+.nav-link { color: #cce5ed; }
+.nav-link.active { color: #042b40; background: linear-gradient(105deg, #20c5dc, #5fdce7); box-shadow: 0 4px 15px #00182d24; }
+.nav-link:hover:not(.active) { color: #e9faff; background: #0b455d; }
+.nav-link.active::before { content: ''; width: 3px; height: 18px; flex: none; background: #fff7d6; border-radius: 3px; }
+.sidebar-footer { border-color: #60c6dd33; background: #001e3229; }
+.sidebar-footer .sensor-icon { color: #20c5dc; background: #20c5dc12; }
+.content { background: radial-gradient(ellipse at 20% 0, #e9faff 0, #f5fafb 48%, #f9fbfb 100%); }
+.eyebrow, .dashboard-page .eyebrow { color: #007f9f; letter-spacing: .12em; }
+h1, h2, .dashboard-page h1, .dashboard-page h2 { color: #042b40; }
+.dashboard-page .metric-icon.blue { background: linear-gradient(140deg, #20c5dc, #007faf); }
+.dashboard-page .metric-card:first-child { background: linear-gradient(125deg, #e9faff, #fff); border-color: #a5dce7; }
+.dashboard-page .metric-card, .dashboard-page .panel { border-color: #d8eaf0; box-shadow: 0 5px 24px #042b4006; }
+.dashboard-page .text-button { color: #007a99; }
+a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid #007faf; outline-offset: 3px; }
+@media (min-width: 951px) and (max-height: 760px) {
+  .sidebar .brand-logo { height: 82px; }
+  .sidebar .brand { padding-bottom: 10px; }
+  .sidebar nav { margin-top: 15px; }
+}
+@media (max-width: 980px) and (min-width: 951px) {
+  .sidebar .brand { flex: none; padding: 0 15px 0 0; border: 0; border-right: 1px solid #8bdde72b; }
+  .sidebar .brand-logo { width: 140px; height: 70px; }
+  .brand-signature { display: none; }
+  .sidebar nav { margin-top: 0; }
+}
+@media (max-width: 950px) {
+  .mobile-app-header { background: #042b40f7; border-bottom: 1px solid #20c5dc55; box-shadow: 0 4px 20px #00182d18; }
+  .mobile-header-brand { flex: none; }
+  .mobile-header-brand .brand-logo { display: block; width: 139px; height: 55px; object-fit: contain; }
+  .mobile-header-search, .mobile-header-alert { color: #b5e0eb; }
+  .mobile-header-search.active, .mobile-header-alert.active { color: #20c5dc; background: #0a4157; }
+  .mobile-header-profile { border-color: #20c5dc; background: #0a4157; }
+  .mobile-navigation { border-top-color: #d0e8ef; }
+  .mobile-navigation > a.active, .mobile-menu-button.active { color: #007f9f; }
+}
+@media (max-width: 370px) {
+  .mobile-header-brand .brand-logo { width: 120px; }
+}

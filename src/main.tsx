@@ -6,6 +6,8 @@ import './styles/globals.css'
 // Este segundo arquivo contém o visual novo do painel. Separar ele facilita
 // comparar a base original com a evolução feita a partir dela.
 import './styles/dashboard.css'
+import './styles/brand.css'
+import './styles/app-refinement.css'
 
 // O HTML possui uma <div id="root"> vazia. O React assume o controle dessa
 // div e passa a montar toda a interface dentro dela.

@@ -1,15 +1,35 @@
-/**
- * Tipos do banco. Após definir as tabelas, substitua este arquivo pelos tipos
- * gerados com: supabase gen types typescript --linked > src/types/database.ts
- */
+export type PointRow = {
+  id: string
+  name: string
+  location: string
+  attention_cm: number
+  critical_cm: number
+  published: boolean
+}
+export type ReadingRow = {
+  id: string
+  point_id: string
+  level_cm: number
+  recorded_at: string
+}
+type Table<Row, Required extends keyof Row> = {
+  Row: Row
+  Insert: Pick<Row, Required> & Partial<Row>
+  Update: Partial<Row>
+  Relationships: []
+}
 export type Database = {
-  // "public" é o schema padrão do PostgreSQL usado pelo Supabase. Um schema
-  // funciona como uma pasta lógica que organiza tabelas e outros objetos.
   public: {
-    // Record<string, never> indica que ainda não há objetos conhecidos. Quando
-    // os tipos forem gerados pela CLI, estes campos ganharão a estrutura real.
-    Tables: Record<string, never>
-    Views: Record<string, never>
+    Tables: {
+      monitoring_points: Table<PointRow, 'name'>
+      water_readings: Table<ReadingRow, 'point_id' | 'level_cm'>
+    }
+    Views: {
+      monitoring_overview: {
+        Row: PointRow & { level_cm: number | null; recorded_at: string | null }
+        Relationships: []
+      }
+    }
     Functions: Record<string, never>
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>

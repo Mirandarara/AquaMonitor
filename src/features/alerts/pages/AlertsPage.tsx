@@ -1,3 +1,5 @@
+import { StationNotificationHistory } from '@/features/notifications/Notifications'
+import { useSimulation } from '@/features/simulation/hooks/SimulationContext'
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowDown, ArrowUp, Bell, ChevronRight, CircleAlert, CircleCheck, Clock3, Map, Maximize, Navigation, RefreshCw, TriangleAlert, X } from 'lucide-react'
@@ -57,6 +59,7 @@ function MiniMap({ alert, routeShown, onExpand }: { alert: AlertItem; routeShown
 }
 
 export function AlertsPage() {
+  const { mode } = useSimulation()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [filter, setFilter] = useState<AlertFilter>('all')
@@ -76,6 +79,7 @@ export function AlertsPage() {
     setRouteShown(false)
   }
 
+  if (mode === 'wokwi') return <section className="page alerts-page"><header className="page-header"><div><p className="eyebrow">Monitoramento ESP32</p><h1>Alertas e notificações</h1><p className="subtitle">Eventos confirmados pela telemetria; histórico mantido durante esta sessão.</p></div></header><StationNotificationHistory /></section>
   return (
     <section className="page alerts-page">
       <header className="page-header alerts-page-header">
@@ -83,6 +87,8 @@ export function AlertsPage() {
         <div className="alerts-updated"><Clock3 size={24} /><div><span>Última atualização</span><strong>{updateLabel}</strong></div><button type="button" onClick={() => setLastUpdated(new Date())} aria-label="Atualizar horário"><RefreshCw size={23} /></button></div>
       </header>
 
+      <StationNotificationHistory />
+      <p className="subtitle">Cenários urbanos ilustrativos abaixo • dados de demonstração.</p>
       <div className="alerts-summary" aria-label="Resumo dos alertas">
         <div className="alerts-summary-card active"><span><Bell size={27} /></span><p><strong>{activeCount}</strong>ativos</p></div>
         <div className="alerts-summary-card critical"><span><CircleAlert size={29} /></span><p><strong>{criticalCount}</strong>crítico</p></div>

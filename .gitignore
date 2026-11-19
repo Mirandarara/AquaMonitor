@@ -12,3 +12,6 @@ dist/
 *.log
 .DS_Store
 Thumbs.db
+
+# Credenciais locais do ESP32
+**/config.h

@@ -1,108 +1,90 @@
-import { VirtualMonitoring } from '@/features/simulation/components/VirtualMonitoring'
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, ChevronDown, ChevronRight, CircleAlert, MapPin, Radio, Waves, X } from 'lucide-react'
-import { MetricCard } from '@/components/ui/MetricCard'
-import { monitoringPoints, type Trend } from '@/features/dashboard/data/monitoringPoints'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { ArrowRight, ArrowUpRight, CircleAlert, FlaskConical, MapPin, RefreshCw, ShieldCheck, Waves } from 'lucide-react'
+import { useSimulation } from '@/features/simulation/hooks/SimulationContext'
+import { useStationView } from '@/features/esp32/useStationView'
+import { galleryHeight } from '@/features/simulation/engine/simulation'
+import { Esp32Panel } from '@/features/esp32/Esp32Panel'
+import { NotificationFeed } from '@/features/notifications/Notifications'
+import { useMonitoringPoints } from '../hooks/useMonitoringPoints'
+import { pointStatus, priorityPoint, type DashboardPoint, type PointStatus } from '../data/monitoringModel'
+import { fetchPointHistory } from '../data/monitoringRepository'
 
-const alerts = [
-  { pointIndex: 0, message: 'Nível ultrapassou 60 cm', time: '09:42', tone: 'warning' },
-  { pointIndex: 1, message: 'Nível retornou ao normal', time: '08:15', tone: 'normal' },
-  { pointIndex: 2, message: 'Sensor voltou a transmitir', time: '07:50', tone: 'info' },
-]
-
-const chartSeries = {
-  '24h': [34, 29, 42, 63, 55, 87, 119, 91, 97, 78, 85, 63, 66, 48, 48, 39, 29],
-  '7dias': [31, 42, 35, 59, 52, 73, 62, 88, 77, 94, 68, 57, 65, 48, 39, 43, 62],
+const tone: Record<PointStatus, string> = { Normal: 'normal', 'Atenção': 'warning', 'Crítico': 'critical', 'Sem leitura': 'unknown' }
+function updated(point: DashboardPoint) {
+  if (point.demo) return 'Exemplo de leitura'
+  return point.updatedAt ? `Leitura às ${new Date(point.updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : 'Aguardando sensor'
 }
 
-const trendDetails = {
-  rising: { label: 'Subindo', Icon: ArrowUpRight },
-  falling: { label: 'Descendo', Icon: ArrowDownRight },
-  stable: { label: 'Estável', Icon: ArrowRight },
-}
-
-function TrendLabel({ trend }: { trend: Trend }) {
-  const { label, Icon } = trendDetails[trend]
-  return <span className={`trend trend-${trend}`}><Icon size={18} strokeWidth={2.5} />{label}</span>
-}
-
-function LevelChart({ period, pointIndex }: { period: '24h' | '7dias'; pointIndex: number }) {
-  const values = chartSeries[period].map((value) => Math.max(10, value - pointIndex * 9))
-  const width = 720
-  const height = 112
-  const y = (value: number) => height - (value / 150) * height
-  const coordinates = values.map((value, index) => `${(index / (values.length - 1)) * width},${y(value)}`).join(' ')
-  const area = `0,${height} ${coordinates} ${width},${height}`
-  const labels = period === '24h'
-    ? ['09:00', '12:00', '15:00', '18:00', '21:00', '00:00', '03:00', '06:00', '09:00']
-    : ['Qui', 'Sex', 'Sáb', 'Dom', 'Seg', 'Ter', 'Qua']
-
-  return (
-    <div className="chart-plot" role="img" aria-label={`Evolução do nível da água de ${monitoringPoints[pointIndex].name} nos últimos ${period === '24h' ? '24 horas' : '7 dias'}`}>
-      <div className="chart-axis-title">Nível (cm)</div>
-      <div className="chart-y-labels"><span>150</span><span>100</span><span>50</span><span>0</span></div>
-      <div className="chart-drawing">
-        <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" aria-hidden="true">
-          <defs><linearGradient id="chart-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#1ba9bc" stopOpacity=".22" /><stop offset="100%" stopColor="#1ba9bc" stopOpacity=".02" /></linearGradient></defs>
-          <line x1="0" x2={width} y1={y(150)} y2={y(150)} className="chart-threshold critical" />
-          <line x1="0" x2={width} y1={y(100)} y2={y(100)} className="chart-threshold attention" />
-          <line x1="0" x2={width} y1={y(50)} y2={y(50)} className="chart-gridline" />
-          <line x1="0" x2={width} y1={height} y2={height} className="chart-gridline" />
-          <polygon points={area} fill="url(#chart-fill)" />
-          <polyline points={coordinates} className="chart-line" />
-        </svg>
-        <div className="chart-x-labels">{labels.map((label, index) => <span key={`${label}-${index}`}>{label}</span>)}</div>
-      </div>
-    </div>
-  )
+function PointHistory({ point, samples, demo }: { point: DashboardPoint; samples?: { at: number; level: number }[]; demo: boolean }) {
+  const [period, setPeriod] = useState(24)
+  const [history, setHistory] = useState<{ at: number; level: number }[]>([])
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  useEffect(() => {
+    if (demo || samples !== undefined) return
+    const controller = new AbortController()
+    async function load() {
+      setLoading(true); setError(''); setHistory([])
+      try {
+        const data = await fetchPointHistory(point.id, new Date(Date.now() - period * 3600_000).toISOString(), AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]))
+        if (!controller.signal.aborted) setHistory(data)
+      } catch (e) {
+        if (!controller.signal.aborted) setError(e instanceof Error ? e.message : 'Falha ao carregar histórico.')
+      } finally { if (!controller.signal.aborted) setLoading(false) }
+    }
+    void load()
+    return () => controller.abort()
+  }, [point.id, point.updatedAt, period, demo, samples])
+  const values = samples ?? (demo ? [24, 31, 27, 40, 33, 48, 45, 59, 51, 62].map((level, i) => ({ at: i * 3600_000, level: Math.max(0, level + (point.level ?? 62) - 62) })) : history)
+  const max = Math.max(point.critical * 1.15, ...values.map(s => s.level), 1)
+  const first = values[0]?.at ?? 0
+  const span = Math.max(1, (values.at(-1)?.at ?? first) - first)
+  const coordinates = values.map(s => `${12 + (s.at - first) / span * 676},${140 - s.level / max * 125}`).join(' ')
+  const currentStatus = pointStatus(point)
+  return <article className="panel overview-history">
+    <div className="panel-heading"><div><h2>Nível da água</h2><p>{point.name}</p></div>{samples === undefined && !demo && <div className="period-switch" aria-label="Período"><button type="button" className={period === 24 ? 'active' : ''} onClick={() => setPeriod(24)}>24h</button><button type="button" className={period === 168 ? 'active' : ''} onClick={() => setPeriod(168)}>7 dias</button></div>}</div>
+    {loading ? <p className="overview-empty" role="status">Carregando histórico…</p> : error ? <p className="overview-empty" role="alert">{error}</p> : values.length < 2 ? <p className="overview-empty">O gráfico aparece após duas leituras.</p> : <><div className="overview-graph" role="img" aria-label={`Histórico de ${point.name}, ${demo ? 'dados de exemplo' : `${values.length} leituras`}`}><span>{Math.round(max)} cm</span><svg viewBox="0 0 700 160" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="level-area" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#169dba" stopOpacity=".17"/><stop offset="1" stopColor="#169dba" stopOpacity="0"/></linearGradient></defs>{[0, .5, 1].map(n => <line key={n} x1="12" x2="688" y1={15 + n * 125} y2={15 + n * 125} stroke="#edf0f3"/>)}<polygon points={`12,140 ${coordinates} 688,140`} fill="url(#level-area)"/><polyline points={coordinates} fill="none" stroke="#0d90a6" strokeWidth="2.5" vectorEffect="non-scaling-stroke"/></svg><span>0 cm</span></div><div className="overview-chart-caption"><span>{demo ? 'Evolução ilustrativa' : `${new Date(first).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} → ${new Date(values.at(-1)!.at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}</span><strong>{currentStatus === 'Sem leitura' ? '—' : `${point.level?.toFixed(1)} cm`} atual</strong></div></>}
+  </article>
 }
 
 export function DashboardPage() {
-  const navigate = useNavigate()
-  const [selectedPoint, setSelectedPoint] = useState(0)
-  const [period, setPeriod] = useState<'24h' | '7dias'>('24h')
-  const [modal, setModal] = useState<'details' | null>(null)
-  const point = monitoringPoints[selectedPoint]
-  const attentionPoint = monitoringPoints[0]
-
-  function openDetails(index: number) {
-    setSelectedPoint(index)
-    setModal('details')
-  }
-
-  function openMap(index?: number) {
-    navigate(index === undefined ? '/mapa' : `/mapa?ponto=${index}`)
-  }
-
-  return (
-    <section className="page dashboard-page">
-      <header className="page-header"><div><p className="eyebrow">Painel ambiental</p><h1>Visão geral</h1><p className="subtitle">Situação atual dos pontos monitorados e alertas da cidade.</p></div></header>
-
-      <div className="metrics-grid" aria-label="Resumo do monitoramento">
-        <MetricCard label="Pontos monitorados" value="3" detail="Todos os sensores da cidade" icon={<Radio size={27} />} tone="blue" />
-        <MetricCard label="Normais" value="2" detail="Dentro da faixa de segurança" icon={<Waves size={27} />} tone="green" />
-        <MetricCard label="Em atenção" value="1" detail="Nível acima do ideal" icon={<AlertTriangle size={27} />} tone="amber" />
-        <MetricCard label="Críticos" value="0" detail="Nível muito elevado" icon={<CircleAlert size={27} />} tone="red" />
-      </div>
-
-      <VirtualMonitoring />
-
-      <div className="dashboard-grid overview-grid" id="pontos">
-        <article className="panel points-panel">
-          <div className="panel-heading"><div><h2>Situação dos pontos</h2><p>Última atualização em tempo real</p></div><button className="text-button" type="button" onClick={() => openMap()}>Ver todos <ArrowRight size={16} /></button></div>
-          <div className="points-table-wrap" id="point-list"><table className="points-table"><thead><tr><th>Ponto monitorado</th><th>Status</th><th>Nível atual</th><th>Tendência</th><th>Última atualização</th><th><span className="sr-only">Detalhes</span></th></tr></thead><tbody>{monitoringPoints.map((item, index) => <tr key={item.name}><td><button className="point-name-button" type="button" onClick={() => openDetails(index)}><span className="location-icon"><MapPin size={16} /></span>{item.shortName}</button></td><td><span className={`status-pill ${item.status === 'Atenção' ? 'warning' : 'normal'}`}>{item.status}</span></td><td><strong className="table-level">{item.level} <small>cm</small></strong></td><td><TrendLabel trend={item.trend} /></td><td className="update-cell">Atualizado {item.update}</td><td><button className="row-arrow" type="button" onClick={() => openDetails(index)} aria-label={`Ver detalhes de ${item.name}`}><ChevronRight size={18} /></button></td></tr>)}</tbody></table></div>
-        </article>
-
-        <article className="panel current-panel"><div className="panel-heading"><div><h2>Situação atual</h2><p>Ponto que requer atenção no momento.</p></div><button className="text-button" type="button" onClick={() => openMap(0)}>Ver no mapa <ArrowRight size={16} /></button></div><div className="current-card"><div className="current-summary"><span className="current-icon"><AlertTriangle size={25} /></span><div><strong>1 ponto requer atenção</strong><p>Nível acima do ideal</p></div></div><div className="current-location"><span>Ponto</span><strong>{attentionPoint.name}</strong></div><div className="current-stats"><div><span>Nível atual</span><strong>{attentionPoint.level}<small> cm</small></strong></div><div><span>Tendência</span><TrendLabel trend={attentionPoint.trend} /></div><div><span>Última atualização</span><p>Atualizado {attentionPoint.update}</p></div></div><button className="details-button" type="button" onClick={() => openDetails(0)}>Ver detalhes <ChevronRight size={18} /></button></div></article>
-      </div>
-
-      <div className="dashboard-grid lower-grid"><article className="panel chart-panel" id="historico"><div className="panel-heading chart-heading"><div><h2>Evolução do nível da água</h2><p>Acompanhamento do nível nas últimas horas.</p></div><div className="chart-controls"><label className="point-select"><MapPin size={16} /><select value={selectedPoint} onChange={(event) => setSelectedPoint(Number(event.target.value))} aria-label="Selecionar ponto do gráfico">{monitoringPoints.map((item, index) => <option key={item.name} value={index}>{item.name}</option>)}</select><ChevronDown size={16} /></label><div className="period-switch" aria-label="Período do gráfico"><button type="button" className={period === '24h' ? 'active' : ''} onClick={() => setPeriod('24h')}>24h</button><button type="button" className={period === '7dias' ? 'active' : ''} onClick={() => setPeriod('7dias')}>7 dias</button></div></div></div><LevelChart period={period} pointIndex={selectedPoint} /><div className="chart-legend"><span><i className="legend-line attention" />Atenção: 100 cm</span><span><i className="legend-line critical" />Crítico: 150 cm</span></div><div className="chart-stats"><div><span className="stat-icon maximum"><ArrowUpRight size={19} /></span><p><strong>150 cm</strong><small>Máximo (hoje)</small></p></div><div><span className="stat-icon minimum"><ArrowDownRight size={19} /></span><p><strong>21 cm</strong><small>Mínimo (hoje)</small></p></div><div><span className="stat-icon current"><Waves size={19} /></span><p><strong>{point.level} cm</strong><small>Atual</small></p></div></div></article>
-
-        <article className="panel alerts-panel" id="alertas"><div className="panel-heading"><div><h2>Alertas recentes</h2><p>Eventos recebidos hoje.</p></div><button className="text-button" type="button" onClick={() => navigate('/alertas')}>Ver todos <ArrowRight size={16} /></button></div><div className="alert-list" id="alert-list">{alerts.map((alert) => { const item = monitoringPoints[alert.pointIndex]; return <button className="alert-row" type="button" key={`${item.name}-${alert.time}`} onClick={() => navigate(`/alertas?ponto=${alert.pointIndex}`)}><span className={`alert-icon ${alert.tone}`}>{alert.tone === 'info' ? <Radio size={19} /> : <Waves size={19} />}</span><span className="alert-copy"><strong>{item.shortName}</strong><small>{alert.message}</small></span><time>{alert.time}</time><ChevronRight size={17} /></button> })}</div></article>
-      </div>
-
-      {modal && <div className="modal-backdrop" onClick={() => setModal(null)}><div className="dashboard-modal" role="dialog" aria-modal="true" aria-label={`Detalhes de ${point.name}`} onClick={(event) => event.stopPropagation()}><div className="modal-heading"><div><h2>{point.name}</h2><p>Leitura mais recente do sensor</p></div><button type="button" className="modal-close" onClick={() => setModal(null)} aria-label="Fechar"><X size={20} /></button></div><div className="modal-point"><div><span>Status</span><strong>{point.status}</strong></div><div><span>Nível atual</span><strong>{point.level} cm</strong></div><div><span>Tendência</span><TrendLabel trend={point.trend} /></div><div><span>Última atualização</span><strong>Atualizado {point.update}</strong></div><button className="details-button" type="button" onClick={() => openMap(selectedPoint)}>Ver no mapa <ArrowRight size={17} /></button></div></div></div>}
-    </section>
-  )
+  const { mode, mqtt, fresh } = useSimulation()
+  const station = useStationView()
+  const live = mode === 'wokwi'
+  const database = useMonitoringPoints(!live)
+  const [selectedId, setSelectedId] = useState('')
+  const valid = fresh && mqtt.telemetry?.sensor_ok === true
+  const livePoint: DashboardPoint = { id: 'esp32', name: 'Estação ESP32', location: 'Protótipo · Wi-Fi', level: valid ? galleryHeight(station) : null, updatedAt: mqtt.receivedAt ? new Date(mqtt.receivedAt).toISOString() : null, attention: 18, critical: 26 }
+  const points = live ? [livePoint] : database.points
+  const priority = priorityPoint(points)
+  const selected = points.find(p => p.id === selectedId) ?? priority
+  const statuses = points.map(p => pointStatus(p))
+  const attention = statuses.filter(s => s === 'Atenção' || s === 'Crítico').length
+  const normal = statuses.filter(s => s === 'Normal').length
+  const unknown = statuses.filter(s => s === 'Sem leitura').length
+  const unavailable = !live && (database.loading || Boolean(database.error))
+  const demo = !live && database.demo
+  const priorityStatus = priority ? pointStatus(priority) : null
+  return <section className="page dashboard-page concise-dashboard">
+    <header className="page-header"><div><p className="eyebrow">Seu monitoramento</p><h1>Visão geral</h1><p className="subtitle">Tudo o que precisa de atenção, em um só lugar.</p></div><Link to="/mapa" className="overview-primary"><MapPin size={16}/> Abrir mapa <ArrowUpRight size={16}/></Link></header>
+    <div className="overview-source"><span className={`source-chip ${demo ? 'demo' : ''}`}><i/>{live ? valid ? 'ESP32 · leitura atual' : 'ESP32 · aguardando leitura' : demo ? 'Modo demonstração' : database.error ? 'Conexão indisponível' : database.loading ? 'Carregando pontos' : 'Dados do banco'}</span><span>{demo ? 'Dados ilustrativos' : live ? 'Telemetria da estação' : 'Atualização a cada 30 s'}</span></div>
+    <details className="panel sim-technical"><summary>Conectar protótipo físico por Wi-Fi</summary><p>Conecte o ESP32 à internet, selecione a fonte ESP32 e entre com as credenciais MQTT do mesmo broker usado pela placa. Dashboard e maquete recebem as mesmas leituras.</p><Esp32Panel /></details>
+    {database.error && !live && <div className="overview-error" role="alert"><span>{database.error}</span><button type="button" onClick={database.retry}><RefreshCw size={14}/> Tentar novamente</button></div>}
+    <div className="overview-metrics" aria-label="Resumo do monitoramento">
+      <article><span className="overview-metric-icon"><MapPin size={20}/></span><div><strong>{unavailable ? '—' : points.length}</strong><span>Pontos monitorados</span></div></article>
+      <article><span className="overview-metric-icon normal"><ShieldCheck size={20}/></span><div><strong>{unavailable ? '—' : normal}</strong><span>Dentro do esperado</span></div></article>
+      <article><span className={`overview-metric-icon ${attention ? 'warning' : ''}`}><CircleAlert size={20}/></span><div><strong>{unavailable ? '—' : attention}</strong><span>Requerem atenção{unknown > 0 && <small> · {unknown} sem leitura</small>}</span></div></article>
+    </div>
+    <div className="overview-main-grid">
+      <article className="panel overview-points"><div className="panel-heading"><h2>Seus pontos</h2><Link className="text-button" to="/mapa">Ver mapa <ArrowRight size={14}/></Link></div>
+        {points.length === 0 ? <div className="overview-empty"><MapPin size={28}/><strong>{database.loading ? 'Buscando pontos…' : database.error ? 'Pontos indisponíveis' : 'Nenhum ponto publicado'}</strong><span>{database.error ? 'Tente atualizar a conexão.' : 'Os pontos aparecem aqui quando estiverem disponíveis.'}</span></div> : <div className="overview-point-list">{points.map(p => { const status = pointStatus(p); return <button type="button" className={`overview-point ${selected?.id === p.id ? 'selected' : ''}`} key={p.id} onClick={() => setSelectedId(p.id)} aria-pressed={selected?.id === p.id}><span className="overview-point-pin"><MapPin size={18}/></span><span className="overview-point-name"><strong>{p.name}</strong><small>{updated(p)}</small></span><span className="overview-point-reading"><strong>{status === 'Sem leitura' ? '—' : p.level?.toFixed(1)} <small>cm</small></strong><span className={`overview-status ${tone[status]}`}>{status}</span></span></button> })}</div>}
+      </article>
+      <article className={`panel overview-priority ${priorityStatus ? tone[priorityStatus] : ''}`}><div className="overview-priority-label"><CircleAlert size={16}/><span>Agora no monitoramento</span></div><h2>{attention ? `${attention} ponto${attention > 1 ? 's' : ''} em atenção` : unknown ? 'Confira a conexão' : points.length ? 'Tudo dentro do esperado' : 'Pronto para monitorar'}</h2><p>{attention ? 'Acompanhe a evolução do nível neste local.' : unknown ? 'Há sensores sem leitura recente.' : points.length ? 'Nenhum ponto com nível elevado.' : 'Seus pontos aparecerão aqui.'}</p>{priority && <div className="overview-priority-point"><span>{priority.name}</span><strong>{priorityStatus === 'Sem leitura' ? '—' : priority.level?.toFixed(1)} <small>cm</small></strong><span className={`overview-status ${tone[priorityStatus!]}`}>{priorityStatus}</span></div>}<Link to={live ? '/simulacao' : '/mapa'} className="overview-priority-link">{live ? 'Abrir estação' : 'Explorar mapa'}<ArrowRight size={16}/></Link></article>
+      {selected && <PointHistory key={selected.id} point={selected} samples={live ? mqtt.samples : undefined} demo={demo}/>}
+      <article className="panel overview-activity"><div className="panel-heading"><h2>Atividade recente</h2><Link className="text-button" to="/alertas">Ver tudo <ArrowRight size={14}/></Link></div><NotificationFeed limit={3} compact/></article>
+    </div>
+    <Link to="/simulacao" className="overview-lab"><span className="overview-lab-icon"><FlaskConical size={23}/></span><span><strong>Explore a estação virtual</strong><small>Simulação, maquete 3D e conexão ESP32.</small></span><span className="overview-lab-action">Abrir laboratório <ArrowRight size={17}/></span></Link>
+    <p className="overview-footnote"><Waves size={14}/>{demo ? 'Você está explorando um cenário de demonstração.' : 'As leituras apoiam o monitoramento dos pontos cadastrados.'}</p>
+  </section>
 }

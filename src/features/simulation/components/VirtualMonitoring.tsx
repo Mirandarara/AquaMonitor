@@ -6,12 +6,12 @@ import { useSimulation } from '../hooks/SimulationContext'
 import { galleryHeight, pumpLabels, riskLabels, tankLabel, formatTime } from '../engine/simulation'
 
 export function VirtualMonitoring() {
-  const { mode, fresh, mqtt, virtualInput } = useSimulation()
+  const { mode, fresh, mqtt } = useSimulation()
   const s = useStationView()
   const last = s.events.at(-1)!
   return <article className="panel virtual-monitoring">
     <div className="panel-heading"><div><h2><FlaskConical size={18} /> Monitoramento virtual</h2><p>Estação de demonstração • {mode === 'wokwi' ? 'ESP32 Wokwi' : 'valores estimados'} • {s.running ? 'em execução' : s.started ? 'pausada' : 'pronta para iniciar'}</p></div><Link className="text-button" to="/simulacao">Abrir simulação <ArrowRight size={16} /></Link></div>
-    <Esp32Panel />{mode === 'local' || mqtt.telemetry ? <dl className="sim-summary"><div><dt>{mode === 'wokwi' ? fresh ? virtualInput ? 'Galeria do motor (comandos)' : 'Galeria da estação ESP32' : 'Galeria • última leitura' : 'Galeria virtual'}</dt><dd>{galleryHeight(s).toFixed(1)} <small>/ 30 cm</small></dd></div><div><dt>Drenagem</dt><dd>{pumpLabels[s.drainage]}</dd></div><div><dt>Reservatório estimado • {tankLabel(s)}</dt><dd>{s.tankLiters.toFixed(1)} <small>/ {s.capacityLiters} L</small></dd></div><div><dt>Classificação do cenário</dt><dd><span className={`sim-risk sim-risk-${s.risk}`}>{riskLabels[s.risk]}</span></dd></div></dl> : <p>Aguardando a primeira telemetria do ESP32.</p>}
-    <p className="sim-last-event"><time>{formatTime(last.time)}</time> {last.message}</p>
+    <Esp32Panel />{mode === 'local' || mqtt.telemetry ? <dl className="sim-summary"><div><dt>{mode === 'wokwi' ? fresh ? 'Galeria da estação ESP32' : 'Galeria • última leitura' : 'Galeria virtual'}</dt><dd>{mode === 'wokwi' && (!fresh || !mqtt.telemetry?.sensor_ok) ? '—' : galleryHeight(s).toFixed(1)} <small>/ 30 cm</small></dd></div><div><dt>Drenagem</dt><dd>{mode === 'wokwi' && !fresh ? 'Desconhecida' : pumpLabels[s.drainage]}</dd></div><div><dt>Barragem • {mode === 'local' ? tankLabel(s) : 'sem sensor de volume'}</dt><dd>{mode === 'local' ? `${s.tankLiters.toFixed(1)} / ${s.capacityLiters} L estimados` : 'Volume não medido'}</dd></div><div><dt>Classificação do cenário</dt><dd><span className={`sim-risk sim-risk-${s.risk}`}>{mode === 'wokwi' && (!fresh || s.sensorFault) ? 'Sem leitura atual' : riskLabels[s.risk]}</span></dd></div></dl> : <p>Aguardando a primeira telemetria do ESP32.</p>}
+    <p className="sim-last-event">{mode === 'local' ? <><time>{formatTime(last.time)}</time> {last.message}</> : !fresh ? 'Aguardando telemetria válida.' : mqtt.telemetry?.alarm ? `Alarme ESP32: ${mqtt.telemetry.alarm_code}` : 'Nenhum alarme informado pelo ESP32.'}</p>
   </article>
 }

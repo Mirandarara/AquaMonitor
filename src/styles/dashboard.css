@@ -59,7 +59,7 @@ body { background: #f5fbff; }
 .dashboard-page .text-button { display: inline-flex; flex: none; align-items: center; gap: 5px; padding: 0; border: 0; color: #006f8e; background: none; font-size: 12px; font-weight: 700; text-decoration: none; white-space: nowrap; cursor: pointer; }
 .dashboard-page .text-button:hover { color: #004d69; }
 .dashboard-page button:focus-visible, .dashboard-page a:focus-visible, .dashboard-page select:focus-visible { outline: 2px solid #058ca5; outline-offset: 2px; }
-.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.sr-only { position: absolute; left: 0; top: 0; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 .overview-grid > .panel { min-height: 300px; }
 .points-table-wrap { max-width: 100%; margin-top: 13px; overflow-x: auto; border: 1px solid #e0edf5; border-radius: 9px; }
@@ -214,3 +214,6 @@ body { background: #f5fbff; }
   .alert-row { grid-template-columns: 35px minmax(0, 1fr) auto 12px; gap: 7px; }
   .alert-copy small { font-size: 10px; }
 }
+
+.status-pill.critical { color:#a02737; background:#ffe0e5; }
+.status-pill.unknown { color:#526577; background:#e7edf1; }

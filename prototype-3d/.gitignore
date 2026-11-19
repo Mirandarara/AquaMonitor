@@ -1,0 +1,5 @@
+node_modules/
+dist/
+
+# Credenciais locais do ESP32
+**/config.h

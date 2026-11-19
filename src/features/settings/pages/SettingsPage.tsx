@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
+import { DatabaseSettings } from './DatabaseSettings'
 import { Bell, Check, ChevronDown, Clock3, Map, MapPin, Radio, Settings2, ShieldCheck, UserRound, Waves, WifiOff, CircleAlert, TriangleAlert, LocateFixed, Eye, LockKeyhole, SlidersHorizontal, type LucideIcon } from 'lucide-react'
 import { monitoringPoints } from '@/features/dashboard/data/monitoringPoints'
 import '@/styles/settings.css'
 
-type Section = 'notifications' | 'points' | 'map' | 'privacy' | 'account' | 'sensors' | 'rules'
+type Section = 'database' | 'notifications' | 'points' | 'map' | 'privacy' | 'account' | 'sensors' | 'rules'
 type AlertType = 'critical' | 'attention' | 'normalized' | 'offline'
 type Interest = 'all' | 'followed' | 'nearby'
 type SettingsMenuItem = { id: Section; label: string; icon: LucideIcon }
@@ -44,6 +45,7 @@ const menu: readonly SettingsMenuGroup[] = [
   { group: 'Administração', items: [
     { id: 'sensors', label: 'Sensores e pontos', icon: Radio },
     { id: 'rules', label: 'Regras de alerta', icon: Settings2 },
+    { id: 'database', label: 'Conexão de dados', icon: SlidersHorizontal },
   ] },
 ]
 const alertOptions = [
@@ -85,6 +87,7 @@ export function SettingsPage() {
   }
   const activeTitle = menu.flatMap((group) => group.items).find((item) => item.id === section)?.label ?? 'Configurações'
   const descriptions: Record<Section, string> = {
+    database: 'Acompanhe a fonte dos dados do painel.',
     notifications: 'Escolha quando e como deseja ser avisado sobre os eventos do AquaMonitor.',
     points: 'Escolha os pontos que deseja acompanhar de perto.',
     map: 'Personalize as informações exibidas no mapa.',
@@ -106,6 +109,7 @@ export function SettingsPage() {
       <div className="settings-main">
         <div className="settings-main-header"><div><h2>{activeTitle}</h2><p>{descriptions[section]}</p></div>{section === 'notifications' && <span className="settings-status"><Check size={14} /> Preferências ativas</span>}</div>
 
+        {section === 'database' && <DatabaseSettings />}
         {section === 'notifications' && <div className="settings-notification-grid">
           <div className="settings-card"><h3>Tipos de notificação</h3><div className="settings-option-list">
             {alertOptions.map(({ id, title, description, icon: Icon }) => <div className="settings-alert-row" key={id}><span className={`settings-alert-icon ${id}`}><Icon size={19} /></span><span className="settings-option-copy"><strong>{title}</strong><small>{description}</small></span><Toggle checked={settings.alerts[id]} onChange={() => toggleAlert(id)} label={`${title}: ${settings.alerts[id] ? 'ativado' : 'desativado'}`} /></div>)}

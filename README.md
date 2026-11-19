@@ -294,39 +294,16 @@ O cenário I foi verificado no navegador: após iniciar tempestade, pausar e alt
 
 Roteiro rápido: iniciar, simular tempestade e aguardar 20 cm; parar chuva para observar o desligamento a 12 cm; solicitar reúso; preencher o reservatório para testar bloqueio; ativar/desativar falha do sensor; navegar para a Visão geral; reiniciar. Com velocidade de 30×, a tempestade leva aproximadamente 8 segundos reais para sair de 8 cm e chegar a 20 cm.
 
-### Integração ESP32 Wokwi / MQTT
+### Integração ESP32 Wokwi / EMQX Cloud
 
-Projeto de referência: https://wokwi.com/projects/478540696015596545. Contrato conferido diretamente no `sketch.ino` desse projeto, sem modificar firmware ou circuito.
+A integração atual está descrita em [docs/INTEGRACAO-EMQX.md](docs/INTEGRACAO-EMQX.md), incluindo arquitetura, segurança das credenciais temporárias, arquivos alterados, testes locais e roteiro de validação no broker real.
 
-- Broker WebSocket seguro: `wss://broker.emqx.io:8084/mqtt`.
-- Base dos tópicos: `aquamonitor/demo-29out-b741d2`; sufixos `/telemetria`, `/comandos` e `/status`.
-- MQTT.js centralizado em `src/features/esp32/mqttService.ts`; uma conexão por provider, client ID único, sessão limpa, reconexão a cada 2 s, inscrição após cada conexão e remoção de listeners/timers ao sair. Pacotes inválidos e telemetria retida são descartados; leituras expiram após 6 s sem telemetria válida. O status retido `online` sozinho não comprova que o ESP32 está transmitindo.
-- O seletor **Simulação local** preserva o motor offline. **ESP32 conectado (Wokwi)** abre a estação virtual de demonstração, com escala própria de 30 cm, indicadores, alarmes, bombas e gráfico separado. Os pontos e gráficos urbanos permanecem independentes.
-- Entrada **HC-SR04 e chaves do Wokwi**: envia `{"mode":"sensor"}`; o nível e acionamentos exibidos vêm da telemetria, e o motor hidráulico local aguarda.
-- Entrada **Níveis e boias do simulador React**: envia imediatamente e a cada 2 s o comando abaixo, inclusive quando pausado, respeitando o timeout de 8 s do firmware. Reconexão e retorno da aba reenviam os valores atuais. Ao encerrar a entrada virtual, tenta retornar ao sensor; se a conexão já caiu, vale o timeout do firmware.
+Use `npm run dev` nesta pasta e abra `/simulacao`. A maquete integrada é construída pelo `predev` e servida em `/prototype/`. Após alterar os fontes do protótipo enquanto o Vite principal estiver aberto, execute `npm --prefix prototype-3d run build` para atualizar os arquivos servidos.
 
-```json
-{"mode":"virtual","level_cm":8,"tank_full":false,"tank_empty":false,"reuse_requested":false,"sensor_ok":true}
-```
+### Notificações da estação
 
-A telemetria valida `level_cm`, `level_pct`, `distance_cm`, `sensor_ok`, `drain_on`, `reuse_on`, `tank_full`, `tank_empty`, `alarm`, `alarm_code` e `input_mode`, incluindo tipos, faixas e coerência nível/percentual. Os acionamentos do ESP32 são a fonte das bombas no modo conectado. O motor hidráulico aguarda telemetria recente e confirmação de `input_mode: "virtual"`. Leituras recebidas não sobrescrevem os volumes que originam os comandos, evitando realimentação. Os litros do reservatório continuam sendo estimativa local: o firmware transmite boias, não volume em litros. O comando virtual não movimenta fisicamente o controle de distância do HC-SR04 no Wokwi.
+O sino, os avisos na tela e “Alertas recentes” acompanham mudanças de nível, bombas, alarmes e telemetria. O histórico da sessão fica disponível em Alertas, com marcação como lida e identificação da origem ESP32/Wokwi ou simulação local. Consulte [docs/NOTIFICACOES.md](docs/NOTIFICACOES.md) para o roteiro de teste e os arquivos alterados.
 
-### Validação da integração
+## Dashboard conciso e banco preparado
 
-Executar `npm run build`, `npm run lint` e `npm test` (Node 22.18+ ou 24+). A suíte contém 18 testes: os 11 anteriores do motor e 7 adicionais de schema, mensagens, reconexão, expiração, limpeza, contrato de comandos, decisão externa, ausência de realimentação e heartbeat a cada 2 s com relógio controlado. As respostas ESP32 dos testes automatizados são emuladas e não equivalem a uma execução real do firmware.
-
-Verificações realizadas nesta integração:
-
-- Build de produção, lint e suíte automatizada executados. O Vite informa aviso de bundle maior que 500 kB.
-- Conexão real WSS com EMQX e inscrição nos dois tópicos confirmadas por cliente MQTT.js. Na primeira janela de observação de 12 s, recebido somente status retido `offline`, sem telemetria.
-- Dashboard aberto no navegador: seletor de fonte renderizado e pontos urbanos preservados (62, 38 e 21 cm).
-- Firmware do projeto Wokwi lido e contrato conferido. Tentativa de iniciar a simulação pelo botão de execução; o navegador deixou de responder e as consultas seguintes expiraram. Não foi possível comprovar alteração do HC-SR04 nem chuva React com decisões reais retornadas pelo ESP32 nesta sessão.
-
-Roteiro para concluir a validação ao vivo:
-
-1. Iniciar o projeto Wokwi e manter a aba executando. No dashboard, selecionar **ESP32 conectado (Wokwi)** e entrada **HC-SR04 e chaves do Wokwi**. Aguardar “ESP32 transmitindo”. Manter boia superior sem cheio e inferior com água disponível.
-2. Alterar distância para 8 cm (nível aproximadamente 22 cm): esperar drenagem ligada. Alterar para 20 cm (nível aproximadamente 10 cm): esperar drenagem desligada. Conferir mudança automática dos indicadores e gráfico da estação.
-3. Selecionar **Níveis e boias do simulador React**, abrir Simulação, iniciar e clicar **Simular tempestade**. Aguardar confirmação `input_mode: virtual`; nível sobe, comandos seguem a cada 2 s e a decisão `drain_on` do ESP32 passa a comandar o circuito ao alcançar 20 cm.
-4. Pausar: heartbeat deve continuar. Desligar Wokwi: após até 6 s a interface deve indicar telemetria desatualizada e o motor deve aguardar. Voltar à **Simulação local** e confirmar funcionamento offline.
-
-Limitações: broker público sem autenticação, sem exclusão entre vários dashboards usando os mesmos tópicos; usar uma aba controladora por vez. A confirmação é por telemetria de modo/estado, sem ACK individual de comando no firmware atual. Navegadores podem suspender timers de abas em segundo plano: nesse caso o firmware retorna ao sensor após 8 s e o dashboard aguarda confirmação novamente. Histórico e estado ficam em memória; recarregar restaura o cenário. O simulador é didático e não representa bombas reais ou um modelo hidráulico calibrado.
+A visão geral foi reorganizada com resumo, seleção de pontos, prioridade, evolução e acesso ao laboratório. Para ativar o Supabase posteriormente, siga [o guia de conexão](docs/database.md). O esquema inicial fica em `supabase/schema.sql`; sem credenciais, o painel indica modo demonstração.
